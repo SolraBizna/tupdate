@@ -1,0 +1,26 @@
+[package]
+name = "tupdate"
+description = "Tejat Updater"
+version = "0.1.0"
+authors = ["Solra Bizna <solra@bizna.name>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+atty = {version = "0.2", optional = true}
+clap = {version = "4.1", features = ["derive", "wrap_help"]}
+hex = "0.4"
+liso = {version = "1.0.0", optional = true}
+lsx = {version = "1.1", default-features = false, features = ["sha256"]}
+mlua = {version = "0.8.7", features = ["lua54", "vendored"]}
+rayon = "1.6"
+reqwest = {version = "0.11", features = ["blocking"]}
+terminal_size = {version = "0.2.5", optional = true}
+tokio = {version = "1", features = ["rt-multi-thread", "io-util", "fs", "parking_lot", "macros"]}
+url = "2.3"
+wax = "0.5"
+
+[features]
+default = ["gui_liso"]
+gui_liso = ["atty", "liso", "terminal_size"]
+always_pause = []
