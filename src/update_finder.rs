@@ -229,6 +229,11 @@ pub fn find_updates(gui: Rc<RefCell<dyn Gui>>, verbose: bool, body: &[u8], url: 
     for func in UNSAFE_FUNCTIONS.iter() {
         lua.globals().set(*func, Nil).unwrap();
     }
+    if cfg!(windows) { lua.globals().set("windows", true).unwrap(); }
+    if cfg!(unix) { lua.globals().set("unix", true).unwrap(); }
+    if cfg!(target_os="macos") { lua.globals().set("macos", true).unwrap(); }
+    lua.globals().set("target_os", cfg!(target_os)).unwrap();
+    lua.globals().set("target_family", cfg!(target_family)).unwrap();
     let uf = Rc::new(RefCell::new(UpdateFinder::new(gui.clone(), verbose, url)));
     if verbose {
         let gui = gui.clone();
