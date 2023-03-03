@@ -9,7 +9,7 @@ use super::*;
 /// An interactive-capable, Liso-based "GUI". Suitable for use in piped
 /// contexts as well.
 pub struct LisoGui {
-    io: InputOutput,
+    io: Option<InputOutput>,
     last_task_output: String,
     last_subtask_output: String,
     last_progress_output: Option<(u16,u16)>,
@@ -60,7 +60,7 @@ impl Gui for LisoGui {
             }
             line.set_colors(None, None);
         }
-        self.io.status(Some(line));
+        self.io.as_mut().unwrap().status(Some(line));
         if self.last_task_output != task {
             self.last_task_output = task.to_string();
         }
@@ -73,20 +73,20 @@ impl Gui for LisoGui {
     fn do_message(&mut self, title: &str, message: &str) {
         if SHOULD_PAUSE {
             let last_progress = self.take_progress();
-            self.io.wrapln(liso!(+bold, fg=green, title));
-            self.io.wrapln(message);
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=green, title));
+            self.io.as_mut().unwrap().wrapln(message);
             self.consume_liso(Consume::EnterToContinue);
             self.restore_progress(last_progress);
         }
         else {
-            self.io.wrapln(liso!(+bold, fg=green, title));
-            self.io.wrapln(message);
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=green, title));
+            self.io.as_mut().unwrap().wrapln(message);
         }
     }
     fn do_warning(&mut self, title: &str, message: &str, _can_cancel: bool) -> bool {
         let last_progress = self.take_progress();
-        self.io.wrapln(liso!(+bold, fg=yellow, title));
-        self.io.wrapln(message);
+        self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
+        self.io.as_mut().unwrap().wrapln(message);
         let ret = self.consume_liso(Consume::EnterToContinue).is_some();
         self.restore_progress(last_progress);
         ret
@@ -94,18 +94,18 @@ impl Gui for LisoGui {
     fn do_error(&mut self, title: &str, message: &str) {
         if SHOULD_PAUSE {
             let last_progress = self.take_progress();
-            self.io.wrapln(liso!(+bold, fg=red, title));
-            self.io.wrapln(message);
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=red, title));
+            self.io.as_mut().unwrap().wrapln(message);
             self.consume_liso(Consume::EnterToContinue);
             self.restore_progress(last_progress);
         }
         else {
-            self.io.wrapln(liso!(+bold, fg=red, title));
-            self.io.wrapln(message);
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=red, title));
+            self.io.as_mut().unwrap().wrapln(message);
         }
     }
     fn verbose(&mut self, message: &str) {
-        self.io.wrapln(liso!(dim, fg=cyan, message));
+        self.io.as_mut().unwrap().wrapln(liso!(dim, fg=cyan, message));
     }
 }
 
@@ -114,7 +114,7 @@ impl LisoGui {
         let io = InputOutput::new();
         io.prompt("", false, true);
         Some(Rc::new(RefCell::new(LisoGui {
-            io,
+            io: Some(io),
             last_task_output: String::new(),
             last_subtask_output: String::new(),
             last_progress_output: None,
@@ -125,14 +125,14 @@ impl LisoGui {
         = (String::new(), String::new(), self.last_progress_output.take());
         swap(&mut last_task_output, &mut self.last_task_output);
         swap(&mut last_subtask_output, &mut self.last_subtask_output);
-        self.io.status::<&str>(None);
+        self.io.as_mut().unwrap().status::<&str>(None);
         (last_task_output, last_subtask_output, last_progress_output)
     }
     fn consume_liso(&mut self, mode: Consume) -> Option<String> {
         let mut ret = None;
         match mode {
             Consume::All => {
-                while let Some(response) = self.io.try_read() {
+                while let Some(response) = self.io.as_mut().unwrap().try_read() {
                     match response {
                         Response::Dead => std::process::exit(1),
                         _ => (),
@@ -145,23 +145,31 @@ impl LisoGui {
                     Consume::Proceed => "(press enter to continue, or control-C to cancel)\n",
                     _ => unreachable!(),
                 };
-                self.io.prompt(liso!(dim, prompt_text, -dim), true, true);
-                loop {
-                    let response = self.io.read_blocking();
-                    match response {
-                        Response::Input(x) => {
-                            ret = Some(x);
-                            break;
-                        },
-                        Response::Dead => std::process::exit(1),
-                        Response::Quit | Response::Finish if mode == Consume::Proceed => {
-                            ret = None;
-                            break;
-                        },
-                        _ => (),
+                self.io.as_mut().unwrap().prompt(liso!(dim, prompt_text, -dim), true, true);
+                // workaround for blocking_recv being disallowed in an async context
+                let mut io = self.io.take().unwrap();
+                let result = std::thread::spawn(move || {
+                    let ret;
+                    loop {
+                        let response = io.read_blocking();
+                        match response {
+                            Response::Input(x) => {
+                                ret = Some(x);
+                                break;
+                            },
+                            Response::Dead => std::process::exit(1),
+                            Response::Quit | Response::Finish if mode == Consume::Proceed => {
+                                ret = None;
+                                break;
+                            },
+                            _ => (),
+                        }
                     }
-                }
-                self.io.prompt("", false, false);
+                    (io, ret)
+                }).join().unwrap();
+                self.io = Some(result.0);
+                ret = result.1;
+                self.io.as_mut().unwrap().prompt("", false, false);
             },
         }
         ret
@@ -181,11 +189,11 @@ impl LisoGui {
 
 impl Drop for LisoGui {
     fn drop(&mut self) {
-        self.io.status::<&str>(None);
-        self.io.prompt("", false, true);
-        self.io.send_custom(());
+        self.io.as_mut().unwrap().status::<&str>(None);
+        self.io.as_mut().unwrap().prompt("", false, true);
+        self.io.as_mut().unwrap().send_custom(());
         loop {
-            let response = self.io.try_read();
+            let response = self.io.as_mut().unwrap().try_read();
             match response {
                 Some(Response::Dead) => std::process::exit(1),
                 Some(Response::Custom(_)) => break,
