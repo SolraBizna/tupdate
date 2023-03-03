@@ -34,6 +34,14 @@ pub trait Gui: Send {
 /// - `Err(false)` = `--gui help` was issued
 /// - `Err(true)` = a fatal error occurred
 pub fn create_gui(mut target_gui: Option<String>) -> Result<Rc<RefCell<dyn Gui>>, bool> {
+    if target_gui.as_ref().map(String::as_str) == Some("help") {
+        println!("Available GUIs:");
+        println!("    batch: No progress information. Outputs all messages directly to stdout. Assumes \"OK\" on all prompts.");
+        if cfg!(feature="gui_liso") {
+            println!("    liso: Interactive terminal experience. Pipe friendly. (Used by default if all three standard file descriptors are for an interactive terminal.)");
+        }
+        return Err(false);
+    }
     #[cfg(feature="gui_liso")]
     if target_gui == None && atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout) && atty::is(atty::Stream::Stderr) {
         // If we are being run in an interactive terminal, and no --gui option
