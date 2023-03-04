@@ -110,15 +110,15 @@ impl Gui for LisoGui {
 }
 
 impl LisoGui {
-    pub fn new() -> Option<Rc<RefCell<dyn Gui>>> {
+    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(f: T) -> Result<ExitCode, T> {
         let io = InputOutput::new();
         io.prompt("", false, true);
-        Some(Rc::new(RefCell::new(LisoGui {
+        Ok(f(Rc::new(RefCell::new(LisoGui {
             io: Some(io),
             last_task_output: String::new(),
             last_subtask_output: String::new(),
             last_progress_output: None,
-        })))
+        }))))
     }
     fn take_progress(&mut self) -> (String, String, Option<(u16,u16)>) {
         let (mut last_task_output, mut last_subtask_output, last_progress_output)

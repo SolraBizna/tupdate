@@ -434,17 +434,14 @@ async fn real_main(gui: Rc<RefCell<dyn Gui>>, verbose: bool, target_url: Option<
 // hack to prevent Liso from being dropped inside the tokio runtime
 fn main() -> ExitCode {
     let Invocation { gui: target_gui, verbose, target_url } = Invocation::parse();
-    let gui = match create_gui(target_gui) {
-        Ok(gui) => gui,
-        Err(false) => return ExitCode::SUCCESS,
-        Err(true) => return ExitCode::FAILURE,
-    };
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let gui_clone = gui.clone();
-    let ret = rt.block_on(async move {
-        real_main(gui_clone, verbose, target_url).await
-    });
-    drop(rt);
-    drop(gui);
-    ret
+    run_gui(target_gui, move |gui| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let gui_clone = gui.clone();
+        let ret = rt.block_on(async move {
+            real_main(gui_clone, verbose, target_url).await
+        });
+        drop(rt);
+        drop(gui);
+        ret
+    })
 }

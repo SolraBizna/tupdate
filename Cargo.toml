@@ -20,6 +20,9 @@ tokio = {version = "1", features = ["rt-multi-thread", "io-util", "fs", "parking
 url = "2.3"
 wax = "0.5"
 
+[target.'cfg(target_os="macos")'.dependencies]
+cacao = {version = "0.3.2", features=["appkit"]}
+
 [features]
 default = ["gui_liso"]
 gui_liso = ["atty", "liso", "terminal_size"]

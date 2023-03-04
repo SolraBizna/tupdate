@@ -1,11 +1,14 @@
 use std::{
     cell::RefCell,
+    process::ExitCode,
     rc::Rc,
 };
 
 mod batch;
 #[cfg(feature="liso")]
 mod liso;
+#[cfg(target_os="macos")]
+mod cocoa;
 
 /// A graphical front end for Tupdate.
 pub trait Gui: Send {
@@ -29,18 +32,19 @@ pub trait Gui: Send {
     }
 }
 
-/// Tries to make a new GUI. Returns:
-/// - `Ok(gui)` = success
-/// - `Err(false)` = `--gui help` was issued
-/// - `Err(true)` = a fatal error occurred
-pub fn create_gui(mut target_gui: Option<String>) -> Result<Rc<RefCell<dyn Gui>>, bool> {
+/// Tries to make a new GUI and use it to run the given function. Returns an
+/// `ExitCode`.
+pub fn run_gui<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(mut target_gui: Option<String>, f: T) -> ExitCode {
     if target_gui.as_ref().map(String::as_str) == Some("help") {
         println!("Available GUIs:");
         println!("    batch: No progress information. Outputs all messages directly to stdout. Assumes \"OK\" on all prompts.");
+        if cfg!(target_os="macos") {
+            println!("    cocoa: Full Macintosh GUI.");
+        }
         if cfg!(feature="gui_liso") {
             println!("    liso: Interactive terminal experience. Pipe friendly. (Used by default if all three standard file descriptors are for an interactive terminal.)");
         }
-        return Err(false);
+        return ExitCode::SUCCESS;
     }
     #[cfg(feature="gui_liso")]
     if target_gui == None && atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout) && atty::is(atty::Stream::Stderr) {
@@ -50,18 +54,31 @@ pub fn create_gui(mut target_gui: Option<String>) -> Result<Rc<RefCell<dyn Gui>>
     }
     if let Some(target_gui) = target_gui {
         match target_gui.as_str() {
+            "batch" => return batch::BatchGui::go(f).unwrap_or(ExitCode::FAILURE),
+            #[cfg(target_os="macos")]
+            "cocoa" => return cocoa::CocoaGui::go(f).unwrap_or(ExitCode::FAILURE),
             #[cfg(feature="gui_liso")]
-            "liso" => return liso::LisoGui::new().ok_or(true),
-            "batch" => return batch::BatchGui::new().ok_or(true),
+            "liso" => return liso::LisoGui::go(f).unwrap_or(ExitCode::FAILURE),
             _ => {
                 eprintln!("The GUI type you requested is unknown or unavailable. Try \"--gui help\".");
-                return Err(true)
+                return ExitCode::FAILURE
             },
         }
     }
+    #[cfg(target_os="macos")]
+    let f = match cocoa::CocoaGui::go(f) {
+        Ok(x) => return x,
+        Err(x) => x,
+    };
     // Wayland or X GUIs would go here
     #[cfg(feature="gui_liso")]
-    if let Some(x) = liso::LisoGui::new() { return Ok(x) }
-    if let Some(x) = batch::BatchGui::new() { return Ok(x) }
+    let f = match liso::LisoGui::go(f) {
+        Ok(x) => return x,
+        Err(x) => x,
+    };
+    let _f = match batch::BatchGui::go(f) {
+        Ok(x) => return x,
+        Err(x) => x,
+    };
     panic!("No GUI could be started—this should never happen!")
 }
