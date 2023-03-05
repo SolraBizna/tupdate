@@ -57,7 +57,7 @@ struct Cat {
 impl Cat {
     fn try_parse(line: &str, base_url: &Url, base_path: &PathBuf) -> Result<Cat, ()> {
         let split: Vec<&str> = line.split(";").collect();
-        if split.len() != 3 { return Err(()) }
+        if split.len() < 3 { return Err(()) }
         if split[1].len() != 64 { return Err(()) }
         let size = split[2].parse::<u64>().map_err(|_| ())?;
         let file_path = split[0];
