@@ -9,7 +9,7 @@ use cacao::{
     appkit::{Alert, App, AppDelegate, window::{Window, WindowConfig, WindowDelegate, WindowStyle}},
     layout::{Layout, LayoutConstraint},
     progress::ProgressIndicator,
-    text::Label,
+    text::{Label, TextAlign},
     view::View, notification_center::Dispatcher,
 };
 
@@ -27,7 +27,7 @@ struct GuiWindow {
     determinate: bool,
 }
 
-const LABEL_GAP: f64 = 12.0;
+const TOP_GAP: f64 = 16.0;
 const BAR_GAP: f64 = 12.0;
 const HGAP: f64 = 24.0;
 
@@ -91,6 +91,7 @@ impl WindowDelegate for GuiWindow {
     fn did_load(&mut self, window: Window) {
         window.set_title("Tejat Updater");
         self.tasklabel.set_text("Initializing...");
+        self.subtasklabel.set_text_alignment(TextAlign::Right);
         self.bar.set_indeterminate(true);
         self.bar.start_animation();
         self.view.add_subview(&self.tasklabel);
@@ -98,10 +99,10 @@ impl WindowDelegate for GuiWindow {
         self.view.add_subview(&self.bar);
         LayoutConstraint::activate(&[
             self.view.width.constraint_equal_to_constant(512.0),
-            self.tasklabel.top.constraint_equal_to(&self.view.top).offset(LABEL_GAP),
+            self.tasklabel.top.constraint_equal_to(&self.view.top).offset(TOP_GAP),
             self.tasklabel.leading.constraint_equal_to(&self.view.leading).offset(HGAP),
             self.tasklabel.trailing.constraint_equal_to(&self.view.trailing).offset(-HGAP),
-            self.subtasklabel.top.constraint_equal_to(&self.tasklabel.bottom).offset(LABEL_GAP),
+            self.subtasklabel.top.constraint_equal_to(&self.view.top).offset(TOP_GAP),
             self.subtasklabel.leading.constraint_equal_to(&self.view.leading).offset(HGAP),
             self.subtasklabel.trailing.constraint_equal_to(&self.view.trailing).offset(-HGAP),
             self.bar.top.constraint_equal_to(&self.subtasklabel.bottom).offset(BAR_GAP),
