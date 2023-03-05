@@ -4,6 +4,7 @@ use std::{
     env,
     path::{Path, PathBuf},
     rc::Rc,
+    sync::Arc,
 };
 use mlua::{
     Lua,
@@ -281,11 +282,39 @@ pub fn find_updates(gui: Rc<RefCell<dyn Gui>>, verbose: bool, body: &[u8], url: 
             uf.delete_unmatched(lua, param)
         }).unwrap()).unwrap();
     }
+    {
+        let gui = gui.clone();
+        lua.globals().set("do_message", lua.create_function_mut(move |_lua, param: (String, String)| {
+            gui.borrow_mut().do_message(&param.0, &param.1);
+            Ok(())
+        }).unwrap()).unwrap();
+    }
+    {
+        let gui = gui.clone();
+        lua.globals().set("do_warning", lua.create_function_mut(move |_lua, param: (String, String, Option<bool>)| {
+            Ok(gui.borrow_mut().do_warning(&param.0, &param.1, param.2.unwrap_or(false)))
+        }).unwrap()).unwrap();
+    }
+    {
+        let gui = gui.clone();
+        lua.globals().set("do_error", lua.create_function_mut(move |_lua, param: (String, String)| {
+            gui.borrow_mut().do_error(&param.0, &param.1);
+            Ok(())
+        }).unwrap()).unwrap();
+    }
+    {
+        lua.globals().set("bail_out", lua.create_function_mut(move |_lua, _: ()| -> mlua::Result<()> {
+            Err(mlua::Error::ExternalError(Arc::new(BailOut)))
+        }).unwrap()).unwrap();
+    }
     match lua.load(body).set_name("@index").unwrap().exec() {
         Ok(_) => (),
         Err(x) => {
             if let mlua::Error::CallbackError { cause, .. } = x {
-                gui.borrow_mut().do_error("Lua error", &format!("An error occurred while processing the update index. The error was:\n{}", cause));
+                let f = format!("{}", cause);
+                if f != "BAIL OUT" {
+                    gui.borrow_mut().do_error("Lua error", &format!("An error occurred while processing the update index. The error was:\n{}", cause));
+                }
             }
             else {
                 gui.borrow_mut().do_error("Lua error", &format!("An error occurred while processing the update index. The error was:\n{}", x));
@@ -303,3 +332,14 @@ pub fn find_updates(gui: Rc<RefCell<dyn Gui>>, verbose: bool, body: &[u8], url: 
     }
     Ok((uf.installs, uf.deletes))
 }
+
+#[derive(Debug)]
+struct BailOut;
+impl std::error::Error for BailOut {}
+
+impl std::fmt::Display for BailOut {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "BAIL OUT")
+    }
+}
+

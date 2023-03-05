@@ -6,12 +6,15 @@ use std::{
 };
 
 use cacao::{
-    appkit::{Alert, App, AppDelegate, window::{Window, WindowConfig, WindowDelegate, WindowStyle}},
+    appkit::{App, AppDelegate, window::{Window, WindowConfig, WindowDelegate, WindowStyle}},
     layout::{Layout, LayoutConstraint},
     progress::ProgressIndicator,
     text::{Label, TextAlign},
     view::View, notification_center::Dispatcher,
 };
+
+mod alertish;
+use alertish::*;
 
 struct GuiApp {
     window: Mutex<Option<Window<GuiWindow>>>,
@@ -72,13 +75,24 @@ impl Dispatcher for GuiApp {
                     windel.subtasklabel.set_text(subtask);
                 }
             },
-            // TODO: cancellable Warning
-            Request::Message { title, message}
-            | Request::Warning { title, message, .. }
-            | Request::Error { title, message } => {
+            Request::Message { title, message} => {
                 window.close();
-                let alert = Alert::new(&title, &message);
-                alert.show();
+                let alert = Alert::new(&title, &message, false, AlertStyle::Informational);
+                alert.run_modal();
+                window.show();
+                let _ = self.res_tx.send(true);
+            },
+            Request::Warning { title, message, can_cancel} => {
+                window.close();
+                let alert = Alert::new(&title, &message, can_cancel, AlertStyle::Warning);
+                let response = alert.run_modal();
+                window.show();
+                let _ = self.res_tx.send(response == 1000);
+            },
+            Request::Error { title, message} => {
+                window.close();
+                let alert = Alert::new(&title, &message, false, AlertStyle::Error);
+                alert.run_modal();
                 window.show();
                 let _ = self.res_tx.send(true);
             },

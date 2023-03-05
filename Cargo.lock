@@ -1524,6 +1524,8 @@ dependencies = [
  "liso",
  "lsx",
  "mlua",
+ "objc",
+ "objc_id",
  "rayon",
  "reqwest",
  "terminal_size",

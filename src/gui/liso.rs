@@ -83,11 +83,11 @@ impl Gui for LisoGui {
             self.io.as_mut().unwrap().wrapln(message);
         }
     }
-    fn do_warning(&mut self, title: &str, message: &str, _can_cancel: bool) -> bool {
+    fn do_warning(&mut self, title: &str, message: &str, can_cancel: bool) -> bool {
         let last_progress = self.take_progress();
         self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
         self.io.as_mut().unwrap().wrapln(message);
-        let ret = self.consume_liso(Consume::EnterToContinue).is_some();
+        let ret = self.consume_liso(if can_cancel { Consume::Proceed } else { Consume::EnterToContinue }).is_some();
         self.restore_progress(last_progress);
         ret
     }
