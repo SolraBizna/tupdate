@@ -235,6 +235,7 @@ pub fn find_updates(gui: Rc<RefCell<dyn Gui>>, verbose: bool, body: &[u8], url: 
     if cfg!(target_os="macos") { lua.globals().set("macos", true).unwrap(); }
     lua.globals().set("target_os", cfg!(target_os)).unwrap();
     lua.globals().set("target_family", cfg!(target_family)).unwrap();
+    lua.globals().set("tupdate_version", env!("CARGO_PKG_VERSION")).unwrap();
     let uf = Rc::new(RefCell::new(UpdateFinder::new(gui.clone(), verbose, url)));
     if verbose {
         let gui = gui.clone();
