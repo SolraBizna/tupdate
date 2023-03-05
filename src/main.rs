@@ -1,5 +1,4 @@
 use std::{
-    borrow::Borrow,
     cell::RefCell,
     env::current_exe,
     fs::File,
@@ -9,6 +8,7 @@ use std::{
     rc::Rc,
     sync::Mutex,
     sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
+    time::Instant,
 };
 
 use clap::Parser;
@@ -21,6 +21,9 @@ use gui::*;
 
 mod update_finder;
 use update_finder::find_updates;
+
+mod patience;
+use patience::Patience;
 
 const CONFIG_FILE_PATH: &str = "tupdate.conf";
 
@@ -182,8 +185,11 @@ async fn determine_tasks(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, client: &mut
     });
     all_deletions.dedup_by(|a,b| { a.path() == b.path() });
     let mut all_cats = vec![];
+    let mut patience = Patience::new();
     for (n, (basedir, caturl)) in installs.iter().enumerate() {
-        gui.borrow_mut().set_progress("Downloading update catalogs...", &format!("{}/{} {}", n+1, installs.len(), caturl), Some(n as f32 / installs.len() as f32));
+        if patience.have_been_patient() {
+            gui.borrow_mut().set_progress("Downloading update catalogs...", &format!("{}/{} {}", n+1, installs.len(), caturl), Some(n as f32 / installs.len() as f32));
+        }
         let body = match client.get(caturl.clone()).send().await {
             Ok(x) if x.status() == 200 => x.bytes().await.unwrap(),
             Ok(x) => {
@@ -319,9 +325,34 @@ fn trim_deletions(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, all_cats: &mut Vec<
     }
 }
 
+const SECONDS_PER_DAY: f64 = 86400.0;
+
+fn calc_rate_and_eta(start_time: Instant, now: Instant, got_so_far: u64, total_to_get: u64) -> String {
+    if start_time > now { return "?????????".to_string() }
+    let time_so_far = (now - start_time).as_secs_f64();
+    if time_so_far < 1.0 || got_so_far >= total_to_get { return "...".to_string() }
+    let bytes_per_second = got_so_far as f64 / time_so_far;
+    let remaining_seconds = (total_to_get - got_so_far) as f64 / bytes_per_second;
+    let eta = if remaining_seconds >= 100000.0 {
+        let num_days = (remaining_seconds / SECONDS_PER_DAY).floor() as u64;
+        if num_days == 1 { format!("over a day left") }
+        else { format!("over {} days left", num_days) }
+    } else {
+        let seconds = remaining_seconds.floor() as u32;
+        format!("{}:{:02}:{:02} left", seconds / 60 / 60, (seconds / 60) % 60, seconds % 60)
+    };
+    let rate = if bytes_per_second > 1000000000.0 { format!("Wow!") }
+    else if bytes_per_second > 800000.0 { format!("{:.1}MB/s", bytes_per_second / 1000000.0) }
+    else if bytes_per_second > 800.0 { format!("{:.1}kB/s", bytes_per_second / 1000.0) }
+    else { format!("{:.1}B/s", bytes_per_second) };
+    format!("{}, {}", rate, eta)
+}
+
 async fn perform_downloads(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, client: &mut reqwest::Client, all_cats: Vec<Cat>) -> Result<(),()> {
     let total_cat_bytes = all_cats.iter().fold(0, |a,x| a + if x.needs_download { x.size } else { 0 });
     let mut total_recvd_bytes = 0;
+    let start_time = Instant::now();
+    let mut patience = Patience::new();
     for cat in all_cats.into_iter() {
         if !cat.needs_download { continue }
         let mut response = match client.get(cat.src_url.clone()).send().await {
@@ -351,9 +382,12 @@ async fn perform_downloads(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, client: &m
         };
         let mut file_recvd_bytes = 0;
         let mut file_hasher = lsx::sha256::BufSha256::new();
-        let filename = cat.dst_path.file_name().unwrap().to_string_lossy();
         while file_recvd_bytes <= cat.size {
-            gui.borrow_mut().set_progress("Downloading updates...", filename.borrow(), Some(total_recvd_bytes as f32 / total_cat_bytes as f32));
+            let now = Instant::now();
+            let rate_and_eta = calc_rate_and_eta(start_time, now, total_recvd_bytes, total_cat_bytes);
+            if patience.have_been_patient() {
+                gui.borrow_mut().set_progress("Downloading updates...", &rate_and_eta, Some(total_recvd_bytes as f32 / total_cat_bytes as f32));
+            }
             match response.chunk().await {
                 Err(x) => {
                     gui.borrow_mut().do_error("Download failed", &format!("Error while downloading an updated file. The error was:\n{}", x));
