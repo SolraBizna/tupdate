@@ -55,25 +55,26 @@ struct Cat {
 }
 
 impl Cat {
-    fn try_parse(line: &str, base_url: &Url, base_path: &PathBuf) -> Result<Cat, ()> {
-        let split: Vec<&str> = line.split(";").collect();
-        if split.len() < 3 { return Err(()) }
-        if split[1].len() != 64 { return Err(()) }
-        let size = split[2].parse::<u64>().map_err(|_| ())?;
-        let file_path = split[0];
+    fn try_parse<'a>(bytes: &'a [u8], base_url: &Url, base_path: &Path) -> Result<(Cat, &'a [u8]), ()> {
+        let newline = bytes.iter().position(|x| *x == b'\n').ok_or(())?;
+        if newline == 0 { return Err(()) }
+        if newline > bytes.len() - 42 { return Err(()) }
+        let file_path = &bytes[..newline];
+        let file_path = std::str::from_utf8(file_path).map_err(|_| ())?;
+        let checksum = &bytes[newline+1 .. newline+33];
+        let size = u64::from_be_bytes(bytes[newline+33 .. newline+41].try_into().unwrap());
+        let xt = u16::from_be_bytes(bytes[newline+41 .. newline+43].try_into().unwrap());
+        let next = newline + 43 + xt as usize;
+        if next > bytes.len() { return Err(()) }
         if is_fishy_path(file_path) { return Err(()) }
-        let checksum = match hex::decode(split[1]) {
-            Ok(x) if x.len() == 32 => { x.try_into().unwrap() },
-            _ => return Err(()),
-        };
         let src_url = base_url.join(file_path).map_err(|_| ())?;
-        Ok(Cat {
+        Ok((Cat {
             src_url,
             dst_path: base_path.join(file_path),
-            checksum,
+            checksum: checksum.try_into().unwrap(),
             size,
             needs_download: false,
-        })
+        }, &bytes[next..]))
     }
 }
 
@@ -201,29 +202,45 @@ async fn determine_tasks(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, client: &mut
                 return Err(());
             },
         };
-        let as_str = match std::str::from_utf8(&body[..]) {
-            Ok(x) => x,
-            Err(_) => {
-                if verbose {
-                    gui.borrow_mut().verbose(&format!("bad catalog: {}", caturl));
-                }
-                gui.borrow_mut().do_error("Invalid catalog", "Found invalid UTF-8 data in an update catalog. Either it was corrupted during the download, or it's corrupted on the far end. Try again in a minute or two.");
-                return Err(());
-            },
-        };
-        for line in as_str.lines() {
-            if line.is_empty() { continue }
-            let cat = match Cat::try_parse(line, caturl, basedir) {
+        if body.len() == 0 {
+            if verbose {
+                gui.borrow_mut().verbose(&format!("{}: empty cat body", caturl));
+            }
+            gui.borrow_mut().do_error("Missing catalog", &format!("A catalog file was completely empty. This may indicate that the update server is being updated. Try again in a few minutes.\nThe corrupted catalog is: {}", caturl));
+            return Err(());
+        }
+        if &body[..5] != b"\xFFTCat" {
+            if verbose {
+                gui.borrow_mut().verbose(&format!("{}: invalid cat header", caturl));
+            }
+            gui.borrow_mut().do_error("Invalid catalog", &format!("A catalog file was invalid. This is a problem with the update server. Try again in a few minutes.\nThe corrupted catalog is: {}", caturl));
+            return Err(());
+        }
+        let checksum = &body[5..37];
+        let uncompressed_size = u32::from_be_bytes(body[37..41].try_into().unwrap()) as usize;
+        let mut uncompressed = Vec::with_capacity(uncompressed_size as usize);
+        let mut reader = flate2::read::ZlibDecoder::new(&body[41..]);
+        if reader.read_to_end(&mut uncompressed).is_err() || uncompressed.len() != uncompressed_size || lsx::sha256::hash(&uncompressed) != checksum {
+            if verbose {
+                gui.borrow_mut().verbose(&format!("{}: failed decompression", caturl));
+            }
+            gui.borrow_mut().do_error("Invalid catalog", &format!("A catalog file was invalid. This is a problem with the update server. Try again in a few minutes.\nThe corrupted catalog is: {}", caturl));
+            return Err(());
+        }
+        let mut next: &[u8] = &uncompressed;
+        while next.len() > 0 {
+            let (cat, rem) = match Cat::try_parse(next, &caturl, basedir) {
                 Ok(x) => x,
                 Err(_) => {
                     if verbose {
-                        gui.borrow_mut().verbose(&format!("bad catalog: {}", caturl));
+                        gui.borrow_mut().verbose(&format!("{}: failed cat parsing", caturl));
                     }
-                    gui.borrow_mut().do_error("Invalid catalog", "Found an invalid entry in an update catalog. Either it was corrupted during the download, or it's corrupted on the far end. Try again in a minute or two.");
-                    return Err(())
+                    gui.borrow_mut().do_error("Invalid catalog", &format!("A catalog file was invalid. This is a problem with the update server. Try again in a few minutes.\nThe corrupted catalog is: {}", caturl));
+                    return Err(());
                 },
             };
             all_cats.push(cat);
+            next = rem;
         }
     }
     Ok((all_cats, all_deletions.into_iter().map(|x| x.into_path()).collect()))
