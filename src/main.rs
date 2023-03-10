@@ -41,7 +41,11 @@ struct Invocation {
     /// why.
     #[arg(short, long)]
     verbose: bool,
-    #[arg()]
+    #[arg(short, long)]
+    /// Pause and wait for a response after every dialog, if supported by the
+    /// selected GUI. Default depends on the GUI and the platform.
+    #[arg(short, long)]
+    pause: Option<bool>,
     target_url: Option<Url>,
 }
 
@@ -484,8 +488,8 @@ async fn real_main(gui: Rc<RefCell<dyn Gui>>, verbose: bool, target_url: Option<
 
 // hack to prevent Liso from being dropped inside the tokio runtime
 fn main() -> ExitCode {
-    let Invocation { gui: target_gui, verbose, target_url } = Invocation::parse();
-    run_gui(target_gui, move |gui| {
+    let Invocation { gui: target_gui, verbose, target_url, pause } = Invocation::parse();
+    run_gui(target_gui, pause, move |gui| {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let gui_clone = gui.clone();
         let ret = rt.block_on(async move {

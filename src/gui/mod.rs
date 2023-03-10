@@ -34,7 +34,7 @@ pub trait Gui: Send {
 
 /// Tries to make a new GUI and use it to run the given function. Returns an
 /// `ExitCode`.
-pub fn run_gui<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(mut target_gui: Option<String>, f: T) -> ExitCode {
+pub fn run_gui<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(mut target_gui: Option<String>, pause: Option<bool>, f: T) -> ExitCode {
     if target_gui.as_ref().map(String::as_str) == Some("help") {
         println!("Available GUIs:");
         println!("    batch: No progress information. Outputs all messages directly to stdout. Assumes \"OK\" on all prompts.");
@@ -54,11 +54,11 @@ pub fn run_gui<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'stat
     }
     if let Some(target_gui) = target_gui {
         match target_gui.as_str() {
-            "batch" => return batch::BatchGui::go(f).unwrap_or(ExitCode::FAILURE),
+            "batch" => return batch::BatchGui::go(pause, f).unwrap_or(ExitCode::FAILURE),
             #[cfg(target_os="macos")]
-            "cocoa" => return cocoa::CocoaGui::go(f).unwrap_or(ExitCode::FAILURE),
+            "cocoa" => return cocoa::CocoaGui::go(pause, f).unwrap_or(ExitCode::FAILURE),
             #[cfg(feature="gui_liso")]
-            "liso" => return liso::LisoGui::go(f).unwrap_or(ExitCode::FAILURE),
+            "liso" => return liso::LisoGui::go(pause, f).unwrap_or(ExitCode::FAILURE),
             _ => {
                 eprintln!("The GUI type you requested is unknown or unavailable. Try \"--gui help\".");
                 return ExitCode::FAILURE
@@ -66,17 +66,17 @@ pub fn run_gui<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'stat
         }
     }
     #[cfg(target_os="macos")]
-    let f = match cocoa::CocoaGui::go(f) {
+    let f = match cocoa::CocoaGui::go(pause, f) {
         Ok(x) => return x,
         Err(x) => x,
     };
     // Wayland or X GUIs would go here
     #[cfg(feature="gui_liso")]
-    let f = match liso::LisoGui::go(f) {
+    let f = match liso::LisoGui::go(pause, f) {
         Ok(x) => return x,
         Err(x) => x,
     };
-    let _f = match batch::BatchGui::go(f) {
+    let _f = match batch::BatchGui::go(pause, f) {
         Ok(x) => return x,
         Err(x) => x,
     };

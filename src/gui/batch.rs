@@ -18,7 +18,7 @@ impl Gui for BatchGui {
 }
 
 impl BatchGui {
-    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(f: T) -> Result<ExitCode, T> {
+    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(_: Option<bool>, f: T) -> Result<ExitCode, T> {
         Ok(f(Rc::new(RefCell::new(BatchGui))))
     }
 }

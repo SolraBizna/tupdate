@@ -1,7 +1,7 @@
 [package]
 name = "tupdate"
 description = "Tejat Updater"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Solra Bizna <solra@bizna.name>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,7 @@ atty = {version = "0.2", optional = true}
 clap = {version = "4.1", features = ["derive", "wrap_help"]}
 flate2 = "1.0"
 hex = "0.4"
-liso = {version = "1.0.0", optional = true}
+liso = {version = "1.0.2", optional = true}
 lsx = {version = "1.1", default-features = false, features = ["sha256"]}
 mlua = {version = "0.8.7", features = ["lua54", "vendored"]}
 rayon = "1.6"
@@ -30,4 +30,4 @@ objc_id = {version = "0.1"}
 [features]
 default = ["gui_liso"]
 gui_liso = ["atty", "liso", "terminal_size"]
-always_pause = []
+force_default_pause = []

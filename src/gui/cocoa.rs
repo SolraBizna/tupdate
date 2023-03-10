@@ -141,7 +141,7 @@ pub struct CocoaGui {
 }
 
 impl CocoaGui {
-    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(f: T) -> Result<ExitCode, T> {
+    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(_: Option<bool>, f: T) -> Result<ExitCode, T> {
         let (res_tx, res_rx) = mpsc::channel();
         std::thread::spawn(move || {
             f(Rc::new(RefCell::new(CocoaGui { res_rx })));

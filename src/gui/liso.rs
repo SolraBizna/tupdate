@@ -13,11 +13,12 @@ pub struct LisoGui {
     last_task_output: String,
     last_subtask_output: String,
     last_progress_output: Option<(u16,u16)>,
+    pause: bool,
 }
 
 /// True if we should pause after outputting a message or error, false if we
 /// should not.
-const SHOULD_PAUSE: bool = cfg!(any(feature="always_pause",all(windows,not(unix))));
+const DEFAULT_PAUSE: bool = cfg!(any(feature="force_default_pause",all(windows,not(unix))));
 
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
 enum Consume {
@@ -71,7 +72,7 @@ impl Gui for LisoGui {
         self.consume_liso(Consume::All);
     }
     fn do_message(&mut self, title: &str, message: &str) {
-        if SHOULD_PAUSE {
+        if self.pause {
             let last_progress = self.take_progress();
             self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=green, title));
             self.io.as_mut().unwrap().wrapln(message);
@@ -84,15 +85,22 @@ impl Gui for LisoGui {
         }
     }
     fn do_warning(&mut self, title: &str, message: &str, can_cancel: bool) -> bool {
-        let last_progress = self.take_progress();
-        self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
-        self.io.as_mut().unwrap().wrapln(message);
-        let ret = self.consume_liso(if can_cancel { Consume::Proceed } else { Consume::EnterToContinue }).is_some();
-        self.restore_progress(last_progress);
-        ret
+        if self.pause || can_cancel {
+            let last_progress = self.take_progress();
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
+            self.io.as_mut().unwrap().wrapln(message);
+            let ret = self.consume_liso(if can_cancel { Consume::Proceed } else { Consume::EnterToContinue }).is_some();
+            self.restore_progress(last_progress);
+            ret
+        }
+        else {
+            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
+            self.io.as_mut().unwrap().wrapln(message);
+            true
+        }
     }
     fn do_error(&mut self, title: &str, message: &str) {
-        if SHOULD_PAUSE {
+        if self.pause {
             let last_progress = self.take_progress();
             self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=red, title));
             self.io.as_mut().unwrap().wrapln(message);
@@ -110,7 +118,7 @@ impl Gui for LisoGui {
 }
 
 impl LisoGui {
-    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(f: T) -> Result<ExitCode, T> {
+    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(pause: Option<bool>, f: T) -> Result<ExitCode, T> {
         let io = InputOutput::new();
         io.prompt("", false, true);
         Ok(f(Rc::new(RefCell::new(LisoGui {
@@ -118,6 +126,11 @@ impl LisoGui {
             last_task_output: String::new(),
             last_subtask_output: String::new(),
             last_progress_output: None,
+            pause: pause.unwrap_or_else(|| {
+                if !(atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout)) {
+                    false
+                } else { DEFAULT_PAUSE }
+            }),
         }))))
     }
     fn take_progress(&mut self) -> (String, String, Option<(u16,u16)>) {
