@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     env::current_exe,
+    error::Error,
     fs::File,
     io::{Read, BufRead, BufReader, ErrorKind, Write},
     process::ExitCode,
@@ -177,6 +178,11 @@ async fn determine_tasks(gui: &Rc<RefCell<dyn Gui>>, verbose: bool, client: &mut
                 let path = match path {
                     Ok(x) => x,
                     Err(x) => {
+                        if let Some(x) = x.source().and_then(|x| x.downcast_ref::<std::io::Error>()) {
+                            if x.kind() == std::io::ErrorKind::NotFound {
+                                continue
+                            }
+                        }
                         gui.borrow_mut().do_error("Error checking files to delete", &format!("An error occurred while trying to look through files we might need to delete. The error was:\n{}", x));
                         return Err(())
                     },
