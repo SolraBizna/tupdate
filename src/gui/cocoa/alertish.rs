@@ -10,17 +10,24 @@ use cacao::foundation::{id, NSInteger, NSString};
 pub struct Alert(Id<Object>);
 
 pub enum AlertStyle {
-    Warning, Informational, Error
+    Warning,
+    Informational,
+    Error,
 }
 
 impl Alert {
-    pub fn new(title: &str, message: &str, can_cancel: bool, alert_type: AlertStyle) -> Self {
+    pub fn new(
+        title: &str,
+        message: &str,
+        can_cancel: bool,
+        alert_type: AlertStyle,
+    ) -> Self {
         let title = NSString::new(title);
         let message = NSString::new(message);
         let ok = NSString::new("OK");
         let alert_style = match alert_type {
             AlertStyle::Warning => 0,
-            AlertStyle::Informational => 1, 
+            AlertStyle::Informational => 1,
             AlertStyle::Error => 2,
         };
         Alert(unsafe {
@@ -38,9 +45,6 @@ impl Alert {
 
     /// Shows this alert as a modal, and return the response. 1000 = OK, 1001 = cancel.
     pub fn run_modal(&self) -> NSInteger {
-        unsafe {
-            msg_send![&*self.0, runModal]
-        }
+        unsafe { msg_send![&*self.0, runModal] }
     }
 }
-

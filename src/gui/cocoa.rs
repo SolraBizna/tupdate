@@ -2,15 +2,19 @@ use super::*;
 
 use std::{
     process::ExitCode,
-    sync::{Mutex, mpsc},
+    sync::{mpsc, Mutex},
 };
 
 use cacao::{
-    appkit::{App, AppDelegate, window::{Window, WindowConfig, WindowDelegate, WindowStyle}},
+    appkit::{
+        window::{Window, WindowConfig, WindowDelegate, WindowStyle},
+        App, AppDelegate,
+    },
     layout::{Layout, LayoutConstraint},
+    notification_center::Dispatcher,
     progress::ProgressIndicator,
     text::{Label, TextAlign},
-    view::View, notification_center::Dispatcher,
+    view::View,
 };
 
 mod alertish;
@@ -39,10 +43,7 @@ impl AppDelegate for GuiApp {
         App::activate();
         let mut winlock = self.window.lock().unwrap();
         let mut config = WindowConfig::default();
-        config.set_styles(&[
-            WindowStyle::Titled,
-            WindowStyle::Miniaturizable,
-        ]);
+        config.set_styles(&[WindowStyle::Titled, WindowStyle::Miniaturizable]);
         *winlock = Some(Window::with(config, GuiWindow::default()));
         winlock.as_ref().unwrap().show();
     }
@@ -55,12 +56,15 @@ impl Dispatcher for GuiApp {
         let window = window.as_mut().unwrap();
         let windel = window.delegate.as_mut().unwrap();
         match message {
-            Request::SetProgress { task, subtask, progress } => {
+            Request::SetProgress {
+                task,
+                subtask,
+                progress,
+            } => {
                 if progress.is_none() && windel.determinate {
                     windel.bar.set_indeterminate(true);
                     windel.bar.start_animation();
-                }
-                else if let Some(progress) = progress {
+                } else if let Some(progress) = progress {
                     if !windel.determinate {
                         windel.bar.stop_animation();
                         windel.bar.set_indeterminate(false);
@@ -74,28 +78,43 @@ impl Dispatcher for GuiApp {
                 if subtask != windel.subtasklabel.get_text() {
                     windel.subtasklabel.set_text(subtask);
                 }
-            },
-            Request::Message { title, message} => {
+            }
+            Request::Message { title, message } => {
                 window.close();
-                let alert = Alert::new(&title, &message, false, AlertStyle::Informational);
+                let alert = Alert::new(
+                    &title,
+                    &message,
+                    false,
+                    AlertStyle::Informational,
+                );
                 alert.run_modal();
                 window.show();
                 let _ = self.res_tx.send(true);
-            },
-            Request::Warning { title, message, can_cancel} => {
+            }
+            Request::Warning {
+                title,
+                message,
+                can_cancel,
+            } => {
                 window.close();
-                let alert = Alert::new(&title, &message, can_cancel, AlertStyle::Warning);
+                let alert = Alert::new(
+                    &title,
+                    &message,
+                    can_cancel,
+                    AlertStyle::Warning,
+                );
                 let response = alert.run_modal();
                 window.show();
                 let _ = self.res_tx.send(response == 1000);
-            },
-            Request::Error { title, message} => {
+            }
+            Request::Error { title, message } => {
                 window.close();
-                let alert = Alert::new(&title, &message, false, AlertStyle::Error);
+                let alert =
+                    Alert::new(&title, &message, false, AlertStyle::Error);
                 alert.run_modal();
                 window.show();
                 let _ = self.res_tx.send(true);
-            },
+            }
         }
     }
 }
@@ -113,16 +132,46 @@ impl WindowDelegate for GuiWindow {
         self.view.add_subview(&self.bar);
         LayoutConstraint::activate(&[
             self.view.width.constraint_equal_to_constant(512.0),
-            self.tasklabel.top.constraint_equal_to(&self.view.top).offset(TOP_GAP),
-            self.tasklabel.leading.constraint_equal_to(&self.view.leading).offset(HGAP),
-            self.tasklabel.trailing.constraint_equal_to(&self.view.trailing).offset(-HGAP),
-            self.subtasklabel.top.constraint_equal_to(&self.view.top).offset(TOP_GAP),
-            self.subtasklabel.leading.constraint_equal_to(&self.view.leading).offset(HGAP),
-            self.subtasklabel.trailing.constraint_equal_to(&self.view.trailing).offset(-HGAP),
-            self.bar.top.constraint_equal_to(&self.subtasklabel.bottom).offset(BAR_GAP),
-            self.bar.leading.constraint_equal_to(&self.view.leading).offset(HGAP),
-            self.bar.trailing.constraint_equal_to(&self.view.trailing).offset(-HGAP),
-            self.view.bottom.constraint_equal_to(&self.bar.bottom).offset(BAR_GAP),
+            self.tasklabel
+                .top
+                .constraint_equal_to(&self.view.top)
+                .offset(TOP_GAP),
+            self.tasklabel
+                .leading
+                .constraint_equal_to(&self.view.leading)
+                .offset(HGAP),
+            self.tasklabel
+                .trailing
+                .constraint_equal_to(&self.view.trailing)
+                .offset(-HGAP),
+            self.subtasklabel
+                .top
+                .constraint_equal_to(&self.view.top)
+                .offset(TOP_GAP),
+            self.subtasklabel
+                .leading
+                .constraint_equal_to(&self.view.leading)
+                .offset(HGAP),
+            self.subtasklabel
+                .trailing
+                .constraint_equal_to(&self.view.trailing)
+                .offset(-HGAP),
+            self.bar
+                .top
+                .constraint_equal_to(&self.subtasklabel.bottom)
+                .offset(BAR_GAP),
+            self.bar
+                .leading
+                .constraint_equal_to(&self.view.leading)
+                .offset(HGAP),
+            self.bar
+                .trailing
+                .constraint_equal_to(&self.view.trailing)
+                .offset(-HGAP),
+            self.view
+                .bottom
+                .constraint_equal_to(&self.bar.bottom)
+                .offset(BAR_GAP),
         ]);
         window.set_content_view(&self.view);
     }
@@ -130,10 +179,25 @@ impl WindowDelegate for GuiWindow {
 
 #[derive(Debug)]
 enum Request {
-    SetProgress { task: String, subtask: String, progress: Option<f32> },
-    Message { title: String, message: String },
-    Warning { title: String, message: String, #[allow(dead_code)] can_cancel: bool },
-    Error { title: String, message: String },
+    SetProgress {
+        task: String,
+        subtask: String,
+        progress: Option<f32>,
+    },
+    Message {
+        title: String,
+        message: String,
+    },
+    Warning {
+        title: String,
+        message: String,
+        #[allow(dead_code)]
+        can_cancel: bool,
+    },
+    Error {
+        title: String,
+        message: String,
+    },
 }
 
 pub struct CocoaGui {
@@ -141,34 +205,67 @@ pub struct CocoaGui {
 }
 
 impl CocoaGui {
-    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(_: Option<bool>, f: T) -> Result<ExitCode, T> {
+    pub fn go<
+        T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static,
+    >(
+        _: Option<bool>,
+        f: T,
+    ) -> Result<ExitCode, T> {
         let (res_tx, res_rx) = mpsc::channel();
         std::thread::spawn(move || {
             f(Rc::new(RefCell::new(CocoaGui { res_rx })));
             App::terminate();
         });
-        App::new("net.tejat.tupdate", GuiApp {
-            res_tx,
-            window: Mutex::new(None),
-        }).run();
+        App::new(
+            "net.tejat.tupdate",
+            GuiApp {
+                res_tx,
+                window: Mutex::new(None),
+            },
+        )
+        .run();
         Ok(ExitCode::SUCCESS)
     }
 }
 
 impl Gui for CocoaGui {
-    fn set_progress(&mut self, task: &str, subtask: &str, progress: Option<f32>) {
-        App::<GuiApp, Request>::dispatch_main(Request::SetProgress { task: task.to_string(), subtask: subtask.to_string(), progress });
+    fn set_progress(
+        &mut self,
+        task: &str,
+        subtask: &str,
+        progress: Option<f32>,
+    ) {
+        App::<GuiApp, Request>::dispatch_main(Request::SetProgress {
+            task: task.to_string(),
+            subtask: subtask.to_string(),
+            progress,
+        });
     }
     fn do_message(&mut self, title: &str, message: &str) {
-        App::<GuiApp, Request>::dispatch_main(Request::Message { title: title.to_string(), message: message.to_string() });
+        App::<GuiApp, Request>::dispatch_main(Request::Message {
+            title: title.to_string(),
+            message: message.to_string(),
+        });
         self.res_rx.recv().unwrap();
     }
-    fn do_warning(&mut self, title: &str, message: &str, can_cancel: bool) -> bool {
-        App::<GuiApp, Request>::dispatch_main(Request::Warning { title: title.to_string(), message: message.to_string(), can_cancel });
+    fn do_warning(
+        &mut self,
+        title: &str,
+        message: &str,
+        can_cancel: bool,
+    ) -> bool {
+        App::<GuiApp, Request>::dispatch_main(Request::Warning {
+            title: title.to_string(),
+            message: message.to_string(),
+            can_cancel,
+        });
         self.res_rx.recv().unwrap()
     }
     fn do_error(&mut self, title: &str, message: &str) {
-        App::<GuiApp, Request>::dispatch_main(Request::Error { title: title.to_string(), message: message.to_string() });
+        App::<GuiApp, Request>::dispatch_main(Request::Error {
+            title: title.to_string(),
+            message: message.to_string(),
+        });
         self.res_rx.recv().unwrap();
     }
 }

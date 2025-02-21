@@ -1,4 +1,4 @@
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 const UPDATE_INTERVAL: Duration = Duration::new(0, 200000000); // 5Hz
 
@@ -17,31 +17,28 @@ impl Patience {
             None => {
                 self.last_time = Some(now);
                 true
-            },
+            }
             Some(mut last_time) => {
                 if now < last_time {
                     // ??!?!
                     self.last_time = Some(now);
                     true
-                }
-                else {
+                } else {
                     let diff = now - last_time;
                     if diff >= UPDATE_INTERVAL * 5 {
                         self.last_time = Some(now);
                         true
-                    }
-                    else if diff >= UPDATE_INTERVAL {
+                    } else if diff >= UPDATE_INTERVAL {
                         while last_time < now {
                             last_time += UPDATE_INTERVAL;
                         }
                         self.last_time = Some(last_time);
                         true
-                    }
-                    else {
+                    } else {
                         false
                     }
                 }
-            },
+            }
         }
     }
 }

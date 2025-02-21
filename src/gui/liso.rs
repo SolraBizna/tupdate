@@ -1,8 +1,6 @@
-use std::{
-    mem::swap,
-};
+use std::mem::swap;
 
-use ::liso::{Color, InputOutput, Response, liso};
+use ::liso::{liso, Color, InputOutput, Response};
 
 use super::*;
 
@@ -12,15 +10,18 @@ pub struct LisoGui {
     io: Option<InputOutput>,
     last_task_output: String,
     last_subtask_output: String,
-    last_progress_output: Option<(u16,u16)>,
+    last_progress_output: Option<(u16, u16)>,
     pause: bool,
 }
 
 /// True if we should pause after outputting a message or error, false if we
 /// should not.
-const DEFAULT_PAUSE: bool = cfg!(any(feature="force_default_pause",all(windows,not(unix))));
+const DEFAULT_PAUSE: bool = cfg!(any(
+    feature = "force_default_pause",
+    all(windows, not(unix))
+));
 
-#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Consume {
     /// Consume everything. Return nothing.
     All,
@@ -32,12 +33,25 @@ enum Consume {
 }
 
 impl Gui for LisoGui {
-    fn set_progress(&mut self, task: &str, subtask: &str, progress: Option<f32>) {
+    fn set_progress(
+        &mut self,
+        task: &str,
+        subtask: &str,
+        progress: Option<f32>,
+    ) {
         let progress_output = progress.map(|ratio| {
-            let term_width = terminal_size::terminal_size().map(|(w,_h)| w.0).unwrap_or(80);
-            ((ratio.clamp(0.0, 1.0) * term_width as f32).floor() as u16, term_width)
+            let term_width = terminal_size::terminal_size()
+                .map(|(w, _h)| w.0)
+                .unwrap_or(80);
+            (
+                (ratio.clamp(0.0, 1.0) * term_width as f32).floor() as u16,
+                term_width,
+            )
         });
-        if self.last_task_output == task && self.last_subtask_output == subtask && self.last_progress_output == progress_output {
+        if self.last_task_output == task
+            && self.last_subtask_output == subtask
+            && self.last_progress_output == progress_output
+        {
             return; // nothing to be done
         }
         let mut line = liso!(+bold, task, -bold);
@@ -49,13 +63,13 @@ impl Gui for LisoGui {
             line.add_text("\n");
             if fill != 0 {
                 line.set_colors(Some(Color::Cyan), Some(Color::Cyan));
-                for _ in 0 .. fill {
+                for _ in 0..fill {
                     line.add_text("=");
                 }
             }
             if fill != width {
                 line.set_colors(Some(Color::Black), Some(Color::Black));
-                for _ in fill .. width {
+                for _ in fill..width {
                     line.add_text(" ");
                 }
             }
@@ -74,27 +88,48 @@ impl Gui for LisoGui {
     fn do_message(&mut self, title: &str, message: &str) {
         if self.pause {
             let last_progress = self.take_progress();
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=green, title));
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=green, title));
             self.io.as_mut().unwrap().wrapln(message);
             self.consume_liso(Consume::EnterToContinue);
             self.restore_progress(last_progress);
-        }
-        else {
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=green, title));
+        } else {
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=green, title));
             self.io.as_mut().unwrap().wrapln(message);
         }
     }
-    fn do_warning(&mut self, title: &str, message: &str, can_cancel: bool) -> bool {
+    fn do_warning(
+        &mut self,
+        title: &str,
+        message: &str,
+        can_cancel: bool,
+    ) -> bool {
         if self.pause || can_cancel {
             let last_progress = self.take_progress();
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=yellow, title));
             self.io.as_mut().unwrap().wrapln(message);
-            let ret = self.consume_liso(if can_cancel { Consume::Proceed } else { Consume::EnterToContinue }).is_some();
+            let ret = self
+                .consume_liso(if can_cancel {
+                    Consume::Proceed
+                } else {
+                    Consume::EnterToContinue
+                })
+                .is_some();
             self.restore_progress(last_progress);
             ret
-        }
-        else {
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=yellow, title));
+        } else {
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=yellow, title));
             self.io.as_mut().unwrap().wrapln(message);
             true
         }
@@ -102,23 +137,36 @@ impl Gui for LisoGui {
     fn do_error(&mut self, title: &str, message: &str) {
         if self.pause {
             let last_progress = self.take_progress();
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=red, title));
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=red, title));
             self.io.as_mut().unwrap().wrapln(message);
             self.consume_liso(Consume::EnterToContinue);
             self.restore_progress(last_progress);
-        }
-        else {
-            self.io.as_mut().unwrap().wrapln(liso!(+bold, fg=red, title));
+        } else {
+            self.io
+                .as_mut()
+                .unwrap()
+                .wrapln(liso!(+bold, fg=red, title));
             self.io.as_mut().unwrap().wrapln(message);
         }
     }
     fn verbose(&mut self, message: &str) {
-        self.io.as_mut().unwrap().wrapln(liso!(dim, fg=cyan, message));
+        self.io
+            .as_mut()
+            .unwrap()
+            .wrapln(liso!(dim, fg = cyan, message));
     }
 }
 
 impl LisoGui {
-    pub fn go<T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static>(pause: Option<bool>, f: T) -> Result<ExitCode, T> {
+    pub fn go<
+        T: FnOnce(Rc<RefCell<dyn Gui>>) -> ExitCode + Send + Sync + 'static,
+    >(
+        pause: Option<bool>,
+        f: T,
+    ) -> Result<ExitCode, T> {
         let io = InputOutput::new();
         io.prompt("", false, true);
         Ok(f(Rc::new(RefCell::new(LisoGui {
@@ -127,15 +175,26 @@ impl LisoGui {
             last_subtask_output: String::new(),
             last_progress_output: None,
             pause: pause.unwrap_or_else(|| {
-                if !(atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout)) {
+                if !(atty::is(atty::Stream::Stdin)
+                    && atty::is(atty::Stream::Stdout))
+                {
                     false
-                } else { DEFAULT_PAUSE }
+                } else {
+                    DEFAULT_PAUSE
+                }
             }),
         }))))
     }
-    fn take_progress(&mut self) -> (String, String, Option<(u16,u16)>) {
-        let (mut last_task_output, mut last_subtask_output, last_progress_output)
-        = (String::new(), String::new(), self.last_progress_output.take());
+    fn take_progress(&mut self) -> (String, String, Option<(u16, u16)>) {
+        let (
+            mut last_task_output,
+            mut last_subtask_output,
+            last_progress_output,
+        ) = (
+            String::new(),
+            String::new(),
+            self.last_progress_output.take(),
+        );
         swap(&mut last_task_output, &mut self.last_task_output);
         swap(&mut last_subtask_output, &mut self.last_subtask_output);
         self.io.as_mut().unwrap().status::<&str>(None);
@@ -145,20 +204,27 @@ impl LisoGui {
         let mut ret = None;
         match mode {
             Consume::All => {
-                while let Some(response) = self.io.as_mut().unwrap().try_read() {
+                while let Some(response) = self.io.as_mut().unwrap().try_read()
+                {
                     match response {
                         Response::Dead => std::process::exit(1),
                         _ => (),
                     }
                 }
-            },
+            }
             Consume::EnterToContinue | Consume::Proceed => {
                 let prompt_text = match mode {
                     Consume::EnterToContinue => "(press enter to continue)\n",
-                    Consume::Proceed => "(press enter to continue, or control-C to cancel)\n",
+                    Consume::Proceed => {
+                        "(press enter to continue, or control-C to cancel)\n"
+                    }
                     _ => unreachable!(),
                 };
-                self.io.as_mut().unwrap().prompt(liso!(dim, prompt_text, -dim), true, true);
+                self.io.as_mut().unwrap().prompt(
+                    liso!(dim, prompt_text, -dim),
+                    true,
+                    true,
+                );
                 // workaround for blocking_recv being disallowed in an async context
                 let mut io = self.io.take().unwrap();
                 let result = std::thread::spawn(move || {
@@ -169,32 +235,37 @@ impl LisoGui {
                             Response::Input(x) => {
                                 ret = Some(x);
                                 break;
-                            },
+                            }
                             Response::Dead => std::process::exit(1),
-                            Response::Quit | Response::Finish if mode == Consume::Proceed => {
+                            Response::Quit | Response::Finish
+                                if mode == Consume::Proceed =>
+                            {
                                 ret = None;
                                 break;
-                            },
+                            }
                             _ => (),
                         }
                     }
                     (io, ret)
-                }).join().unwrap();
+                })
+                .join()
+                .unwrap();
                 self.io = Some(result.0);
                 ret = result.1;
                 self.io.as_mut().unwrap().prompt("", false, false);
-            },
+            }
         }
         ret
     }
-    fn restore_progress(&mut self, last: (String, String, Option<(u16,u16)>)) {
+    fn restore_progress(
+        &mut self,
+        last: (String, String, Option<(u16, u16)>),
+    ) {
         if last.0 != "" || last.1 != "" || last.2 != None {
             self.set_progress(
                 &last.0,
                 &last.1,
-                last.2.map(|(n,d)| {
-                    n as f32 / d as f32
-                })
+                last.2.map(|(n, d)| n as f32 / d as f32),
             );
         }
     }
